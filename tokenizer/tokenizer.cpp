@@ -154,36 +154,38 @@ Tokenizer::nextToken() {
         if (!current_char.has_value()){
           std::string token;
           ss >> token;
-          int len = token.length();
-          int i = 0;
-          for(; i<len-1; i++){
-            if(token.at(i) != '0') break;
+          int len = token.length(), flag = 0;
+          for(int i=0; i<len-1; i++){
+            if(token.at(i) != '0'){
+              flag = i;
+              break;
+            }
           }
           //去除前导0后的有效位数
-          int dis = len - i;
-          if(dis>10 || (dis==10 && token.substr(i,len-i)>"2147483647"))
+          int n = len - flag;
+          if(n>10 || (n==10 && token.substr(flag,n)>"2147483647"))
             return std::make_pair(std::optional<Token>(), std::make_optional<CompilationError>(pos, ErrorCode::ErrIntegerOverflow));
-          return std::make_pair(std::make_optional<Token>(TokenType::UNSIGNED_INTEGER,token.substr(i,len-i),pos,currentPos()),std::optional<CompilationError>());
+          return std::make_pair(std::make_optional<Token>(TokenType::UNSIGNED_INTEGER,token.substr(flag,n),pos,currentPos()),std::optional<CompilationError>());
         }
 
         auto ch = current_char.value();
-
         if(miniplc0::isdigit(ch))
           ss << ch;
         else{
           unreadLast();
           std::string token;
           ss >> token;
-          int len = token.length();
-          int i = 0;
-          for(; i<len-1; i++){
-            if(token.at(i) != '0') break;
+          int len = token.length(), flag = 0;
+          for(int i=0; i<len-1; i++){
+            if(token.at(i) != '0'){
+              flag = i;
+              break;
+            }
           }
-          //去除前导0后的有效位数
-          int dis = len - i;
-          if(dis>10 || (dis==10 && token.substr(i,len-i)>"2147483647"))
+          int n = len - flag;
+          if(n>10 || (n==10 && token.substr(flag,n)>"2147483647"))
             return std::make_pair(std::optional<Token>(), std::make_optional<CompilationError>(pos, ErrorCode::ErrIntegerOverflow));
-          return std::make_pair(std::make_optional<Token>(TokenType::UNSIGNED_INTEGER,token.substr(i,len-i),pos,currentPos()),std::optional<CompilationError>());
+          return std::make_pair(std::make_optional<Token>(TokenType::UNSIGNED_INTEGER,token.substr(flag,n),pos,currentPos()),std::optional<CompilationError>());
         }
 
         break;
@@ -199,40 +201,18 @@ Tokenizer::nextToken() {
         if(!current_char.has_value()){
           std::string str;
           ss >> str;
-          if(str.compare("begin") == 0)
-            return std::make_pair(std::make_optional<Token>(TokenType::BEGIN, str, pos, currentPos()), std::optional<CompilationError>());
-          else if(str.compare("end") == 0)
-            return std::make_pair(std::make_optional<Token>(TokenType::END, str, pos, currentPos()), std::optional<CompilationError>());
-          else if(str.compare("const") == 0)
-            return std::make_pair(std::make_optional<Token>(TokenType::CONST, str, pos, currentPos()), std::optional<CompilationError>());
-          else if(str.compare("var") == 0)
-            return std::make_pair(std::make_optional<Token>(TokenType::VAR, str, pos, currentPos()), std::optional<CompilationError>());
-          else if(str.compare("print") == 0)
-            return std::make_pair(std::make_optional<Token>(TokenType::PRINT, str, pos, currentPos()), std::optional<CompilationError>());
-          else
-            return std::make_pair(std::make_optional<Token>(TokenType::IDENTIFIER, str, pos, currentPos()), std::optional<CompilationError>());
+          return checkKey(str, pos);
         }
 
         auto ch = current_char.value();
-
+        // 判断当前字符
         if(miniplc0::isdigit(ch) || miniplc0::isalpha(ch))
           ss << ch;
         else{
           unreadLast();
           std::string str;
           ss >> str;
-          if(str.compare("begin") == 0)
-            return std::make_pair(std::make_optional<Token>(TokenType::BEGIN, str, pos, currentPos()), std::optional<CompilationError>());
-          else if(str.compare("end") == 0)
-            return std::make_pair(std::make_optional<Token>(TokenType::END, str, pos, currentPos()), std::optional<CompilationError>());
-          else if(str.compare("const") == 0)
-            return std::make_pair(std::make_optional<Token>(TokenType::CONST, str, pos, currentPos()), std::optional<CompilationError>());
-          else if(str.compare("var") == 0)
-            return std::make_pair(std::make_optional<Token>(TokenType::VAR, str, pos, currentPos()), std::optional<CompilationError>());
-          else if(str.compare("print") == 0)
-            return std::make_pair(std::make_optional<Token>(TokenType::PRINT, str, pos, currentPos()), std::optional<CompilationError>());
-          else
-            return std::make_pair(std::make_optional<Token>(TokenType::IDENTIFIER, str, pos, currentPos()), std::optional<CompilationError>());
+          return checkKey(str, pos);
         }
 
         break;
@@ -316,6 +296,21 @@ std::optional<CompilationError> Tokenizer::checkToken(const Token& t) {
       break;
   }
   return {};
+}
+
+std::pair<std::optional<Token>, std::optional<CompilationError>> Tokenizer::checkKey(std::string str, std::pair<int64_t, int64_t> pos) {
+  if(str.compare("begin") == 0)
+    return std::make_pair(std::make_optional<Token>(TokenType::BEGIN, str, pos, currentPos()), std::optional<CompilationError>());
+  else if(str.compare("end") == 0)
+    return std::make_pair(std::make_optional<Token>(TokenType::END, str, pos, currentPos()), std::optional<CompilationError>());
+  else if(str.compare("const") == 0)
+    return std::make_pair(std::make_optional<Token>(TokenType::CONST, str, pos, currentPos()), std::optional<CompilationError>());
+  else if(str.compare("var") == 0)
+    return std::make_pair(std::make_optional<Token>(TokenType::VAR, str, pos, currentPos()), std::optional<CompilationError>());
+  else if(str.compare("print") == 0)
+    return std::make_pair(std::make_optional<Token>(TokenType::PRINT, str, pos, currentPos()), std::optional<CompilationError>());
+  else
+    return std::make_pair(std::make_optional<Token>(TokenType::IDENTIFIER, str, pos, currentPos()), std::optional<CompilationError>());
 }
 
 void Tokenizer::readAll() {

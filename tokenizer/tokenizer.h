@@ -48,6 +48,8 @@ class Tokenizer final {
  private:
   // 检查 Token 的合法性
   std::optional<CompilationError> checkToken(const Token &);
+  // 检查标识符
+  std::pair<std::optional<Token>, std::optional<CompilationError>> checkKey(std::string str, std::pair<int64_t, int64_t> pos);
   //
   // ** 你需要完成这个函数 **
   //
