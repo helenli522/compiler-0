@@ -40,10 +40,17 @@ std::optional<CompilationError> Analyser::analyseMain() {
   // 完全可以参照 <程序> 编写
 
   // <常量声明>
+  auto err1 = analyseConstantDeclaration();
+  if (err1.has_value()) return err1;
 
   // <变量声明>
+  auto err2 = analyseVariableDeclaration();
+  if(err2.has_value()) return err2;
 
   // <语句序列>
+  auto err3 = analyseStatementSequence();
+  if(err3.has_value()) return err3;
+
   return {};
 }
 
@@ -100,34 +107,55 @@ std::optional<CompilationError> Analyser::analyseConstantDeclaration() {
 // 需要补全
 std::optional<CompilationError> Analyser::analyseVariableDeclaration() {
   // 变量声明语句可能有一个或者多个
+  while(true) {
+    // 预读？
+    auto next = nextToken();
+    if (!next.has_value()) return {};
 
-  // 预读？
+    // 'var'
+    if (next.value().GetType() != TokenType::VAR) {
+      unreadToken();
+      return {};
+    }
 
-  // 'var'
+    // <标识符>
+    next = nextToken();
+    if (!next.has_value() || next.value().GetType() != TokenType::IDENTIFIER)
+      return std::make_optional<CompilationError>(_current_pos,
+                                                  ErrorCode::ErrNeedIdentifier);
+    if (isDeclared(next.value().GetValueString()))
+      return std::make_optional<CompilationError>(
+          _current_pos, ErrorCode::ErrDuplicateDeclaration);
 
-  // <标识符>
-  auto ident =
-      /*标识符的 token*/ Token(TokenType::NULL_TOKEN, nullptr, 0, 0, 0, 0);
+    // 变量可能没有初始化，仍然需要一次预读
+    auto ident = next;
 
-  // 变量可能没有初始化，仍然需要一次预读
-  bool initialized = /*填写*/ false;
+    next = nextToken();
+    if (!next.has_value() || (next.value().GetType() != miniplc0::EQUAL_SIGN &&
+                              next.value().GetType() != miniplc0::SEMICOLON))
+      return std::make_optional<CompilationError>(
+          _current_pos, ErrorCode::ErrInvalidVariableDeclaration);
 
-  // '='
-
-  // '<表达式>'
-
-  // ';'
-
-  // 把变量加入符号表
-  if (initialized) {
-    addVariable(ident);
-    // 已经初始化的变量的值的位置正好是之前表达式计算结果，所以不做处理
-  } else {
-    addUninitializedVariable(ident);
-    // 加载一个任意的初始值
-    _instructions.emplace_back(Operation::LIT, 0);
+    if (next.value().GetType() == miniplc0::SEMICOLON) {
+      addUninitializedVariable(ident.value());
+      _instructions.emplace_back(Operation::LIT, 0);
+    }
+    else {
+      addVariable(ident.value());
+      // '='
+      if (!next.has_value() || next.value().GetType() != miniplc0::EQUAL_SIGN)
+        return std::make_optional<CompilationError>(
+            _current_pos, ErrorCode::ErrInvalidVariableDeclaration);
+      // '<表达式>'
+      auto err = analyseExpression();
+      if (err.has_value()) return err;
+      // ';'
+      next = nextToken();
+      if (!next.has_value() || next.value().GetType() != miniplc0::SEMICOLON)
+        return std::make_optional<CompilationError>(_current_pos,
+                                                    ErrorCode::ErrNoSemicolon);
+    }
   }
-
   return {};
 }
 
@@ -152,6 +180,20 @@ std::optional<CompilationError> Analyser::analyseStatementSequence() {
     switch (next.value().GetType()) {
         // 这里需要你针对不同的预读结果来调用不同的子程序
         // 注意我们没有针对空语句单独声明一个函数，因此可以直接在这里返回
+      case TokenType::IDENTIFIER: {
+        auto err = analyseAssignmentStatement();
+        if(err.has_value()) return err;
+        break;
+      }
+      case TokenType::PRINT: {
+        auto err = analyseOutputStatement();
+        if(err.has_value()) return err;
+        break;
+      }
+      case TokenType::SEMICOLON: {
+        next = nextToken();
+        break;
+      }
       default:
         break;
     }
@@ -168,6 +210,23 @@ std::optional<CompilationError> Analyser::analyseConstantExpression(
   // 注意以下均为常表达式
   // +1 -1 1
   // 同时要注意是否溢出
+  auto next = nextToken();
+  if(!next.has_value())
+    return std::make_optional<CompilationError>(_current_pos,ErrorCode::ErrIncompleteExpression);
+
+  auto sign = 1;
+  if(next.value().GetType()==TokenType::PLUS_SIGN)
+    sign = 1;
+  else if(next.value().GetType()==TokenType::MINUS_SIGN)
+    sign = -1;
+  else
+    unreadToken();
+
+  next = nextToken();
+  if(!next.has_value() || next.value().GetType()!=TokenType::UNSIGNED_INTEGER)
+    return std::make_optional<CompilationError>(_current_pos,ErrorCode::ErrIncompleteExpression);
+  std::string str = next.value().GetValueString();
+  out = atoi(str.c_str()) * sign;
   return {};
 }
 
@@ -209,9 +268,8 @@ std::optional<CompilationError> Analyser::analyseAssignmentStatement() {
   // 标识符是常量吗？
   // 需要生成指令吗？
 
-  auto ident =
-      /*标识符的 token*/ Token(TokenType::NULL_TOKEN, nullptr, 0, 0, 0, 0);
-  auto name = ident.GetValueString();
+  auto ident = nextToken();
+  std::string name = ident.value().GetValueString();
   // 未定义
   if (!isDeclared(name)) {
     return {CompilationError(_current_pos, ErrorCode::ErrNotDeclared)};
@@ -220,8 +278,16 @@ std::optional<CompilationError> Analyser::analyseAssignmentStatement() {
   if (isConstant(name)) {
     return {CompilationError(_current_pos, ErrorCode::ErrAssignToConstant)};
   }
-  // 存储这个标识符
-  auto index = getIndex(name);
+
+  auto next = nextToken();
+  if(!next.has_value() || next.value().GetType()!=TokenType::EQUAL_SIGN)
+    return std::make_optional<CompilationError>(_current_pos,ErrorCode::ErrInvalidAssignment);
+
+  auto err = analyseExpression();
+  if(err.has_value())
+    return err;
+
+  auto index = getIndex(name); //这里往后的代码不知道还要不要改
   _instructions.emplace_back(Operation::STO, index);
   if (!isInitializedVariable(name)) makeInitialized(name);
   return {};
@@ -265,14 +331,25 @@ std::optional<CompilationError> Analyser::analyseItem() {
   // 可以参考 <表达式> 实现
 
   // <因子>
+  auto err = analyseFactor();
+  if(err.has_value())
+    return err;
 
   // { <乘法型运算符><因子> }
   while (true) {
     // 预读
-
-    auto type = TokenType::NULL_TOKEN;
+    auto next = nextToken();
+    if(!next.has_value()) return {};
+    auto type = next.value().GetType();
+    if(type != TokenType::MULTIPLICATION_SIGN && type != TokenType::DIVISION_SIGN){
+      unreadToken();
+      return {};
+    }
 
     // <因子>
+    err = analyseFactor();
+    if(err.has_value())
+      return err;
 
     // 根据结果生成指令
     if (type == TokenType::MULTIPLICATION_SIGN)
@@ -296,18 +373,41 @@ std::optional<CompilationError> Analyser::analyseFactor() {
   else if (next.value().GetType() == TokenType::MINUS_SIGN) {
     prefix = -1;
     _instructions.emplace_back(Operation::LIT, 0);
-  } else
+  }
+  else
     unreadToken();
 
   // 预读
   next = nextToken();
   if (!next.has_value())
-    return std::make_optional<CompilationError>(
-        _current_pos, ErrorCode::ErrIncompleteExpression);
+    return std::make_optional<CompilationError>(_current_pos, ErrorCode::ErrIncompleteExpression);
+  std::optional<CompilationError> err;
   switch (next.value().GetType()) {
     // 这里和 <语句序列> 类似，需要根据预读结果调用不同的子程序
     // 但是要注意 default 返回的是一个编译错误
-
+    case IDENTIFIER: {
+      auto ident = next.value().GetValueString();
+      if (!isDeclared(ident))
+           return {CompilationError(_current_pos, ErrorCode::ErrNotDeclared)};
+      if (!isInitializedVariable(ident) && !isConstant(ident))
+           return {CompilationError(_current_pos,ErrorCode::ErrNotInitialized)};
+      _instructions.emplace_back(Operation::LOD, getIndex(ident));
+      break;
+    }
+    case UNSIGNED_INTEGER: {
+      int32_t val = atoi(next.value().GetValueString().c_str());
+      _instructions.emplace_back(LIT,val);
+      break;
+    }
+    case LEFT_BRACKET: {
+      err = analyseExpression();
+      if(err.has_value())
+        return err;
+      next = nextToken();
+      if(!next.has_value() || next.value().GetType()!=TokenType::RIGHT_BRACKET)
+        return std::make_optional<CompilationError>(_current_pos, ErrorCode::ErrIncompleteExpression);
+      break;
+    }
     // 备用代码：
     //
     // - 加载变量

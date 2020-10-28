@@ -152,18 +152,18 @@ Tokenizer::nextToken() {
         //     解析成功则返回无符号整数类型的token，否则返回编译错误
 
         if (!current_char.has_value()){
-          std::string str;
-          ss >> str;
-          int len = str.length();
+          std::string token;
+          ss >> token;
+          int len = token.length();
           int i = 0;
           for(; i<len-1; i++){
-            if(str.at(i) != '0') break;
+            if(token.at(i) != '0') break;
           }
           //去除前导0后的有效位数
           int dis = len - i;
-          if(dis>10 || (dis==10 && str.substr(i,len-i)>"2147483647"))
+          if(dis>10 || (dis==10 && token.substr(i,len-i)>"2147483647"))
             return std::make_pair(std::optional<Token>(), std::make_optional<CompilationError>(pos, ErrorCode::ErrIntegerOverflow));
-          return std::make_pair(std::make_optional<Token>(TokenType::UNSIGNED_INTEGER,str.substr(i,len-i),pos,currentPos()),std::optional<CompilationError>());
+          return std::make_pair(std::make_optional<Token>(TokenType::UNSIGNED_INTEGER,token.substr(i,len-i),pos,currentPos()),std::optional<CompilationError>());
         }
 
         auto ch = current_char.value();
@@ -172,18 +172,18 @@ Tokenizer::nextToken() {
           ss << ch;
         else{
           unreadLast();
-          std::string str;
-          ss >> str;
-          int len = str.length();
+          std::string token;
+          ss >> token;
+          int len = token.length();
           int i = 0;
           for(; i<len-1; i++){
-            if(str.at(i) != '0') break;
+            if(token.at(i) != '0') break;
           }
           //去除前导0后的有效位数
           int dis = len - i;
-          if(dis>10 || (dis==10 && str.substr(i,len-i)>"2147483647"))
+          if(dis>10 || (dis==10 && token.substr(i,len-i)>"2147483647"))
             return std::make_pair(std::optional<Token>(), std::make_optional<CompilationError>(pos, ErrorCode::ErrIntegerOverflow));
-          return std::make_pair(std::make_optional<Token>(TokenType::UNSIGNED_INTEGER,str.substr(i,len-i),pos,currentPos()),std::optional<CompilationError>());
+          return std::make_pair(std::make_optional<Token>(TokenType::UNSIGNED_INTEGER,token.substr(i,len-i),pos,currentPos()),std::optional<CompilationError>());
         }
 
         break;
